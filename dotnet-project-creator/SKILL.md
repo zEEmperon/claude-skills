@@ -23,7 +23,7 @@ Ask the user for **all of the following** before proceeding. You can ask in one 
 2. **Solution name** — e.g. `MyApp`
 3. **Project name** — e.g. `MyApp.Api`
 4. **Language** — `C#` (default), `F#`, or `VB`. Note: not all templates are available for every language.
-5. **Project template** — run `dotnet new list --type project --language "<CHOSEN_LANGUAGE>"` first and show the user the results so they can choose. Let the user pick by short name.
+5. **Project template** — run `dotnet new list --type project --language "<CHOSEN_LANGUAGE>"` first and show the user the **complete, unfiltered** CLI output so they can choose. Do NOT substitute a hardcoded or curated subset — the user may have third-party templates installed. Let the user pick by short name.
 6. **Target framework** (optional) — e.g. `net9.0`, `net8.0`. Leave blank to use the SDK default.
 7. **Directory.Build.props** — yes/no. Centralizes shared MSBuild properties (TreatWarningsAsErrors, Nullable, etc.) across all projects in the solution.
 8. **Directory.Packages.props** (Central Package Management) — yes/no. Only relevant if the user plans multiple projects or wants to centralize NuGet versions. Requires NuGet 6.2+ / .NET SDK 6.0.300+.
@@ -208,50 +208,15 @@ The `dotnet` CLI itself behaves identically on all platforms — all `dotnet` co
 
 ---
 
-## Common dotnet new Templates by Language
+## Available Templates
 
-Always run `dotnet new list --type project --language "<CHOSEN_LANGUAGE>"` to show the exact templates available — the table below is a reference, not exhaustive.
+Do **not** use any hardcoded or predefined template list. Always run:
 
-**C#** (widest template support):
+```bash
+dotnet new list --type project --language "<CHOSEN_LANGUAGE>"
+```
 
-| Short name | Description |
-|---|---|
-| `console` | Console Application |
-| `classlib` | Class Library |
-| `webapi` | ASP.NET Core Web API |
-| `web` | ASP.NET Core Empty |
-| `mvc` | ASP.NET Core MVC |
-| `razor` | ASP.NET Core Razor Pages |
-| `blazorserver` | Blazor Server App |
-| `blazorwasm` | Blazor WebAssembly App |
-| `worker` | Worker Service |
-| `grpc` | ASP.NET Core gRPC Service |
-| `mstest` | MSTest Unit Test Project |
-| `xunit` | xUnit Test Project |
-| `nunit` | NUnit Test Project |
-
-**F#** (functional-first subset):
-
-| Short name | Description |
-|---|---|
-| `console` | Console Application |
-| `classlib` | Class Library |
-| `webapi` | ASP.NET Core Web API |
-| `web` | ASP.NET Core Empty |
-| `worker` | Worker Service |
-| `mstest` | MSTest Unit Test Project |
-| `xunit` | xUnit Test Project |
-| `nunit` | NUnit Test Project |
-
-**VB (Visual Basic)**:
-
-| Short name | Description |
-|---|---|
-| `console` | Console Application |
-| `classlib` | Class Library |
-| `winforms` | Windows Forms App |
-| `wpf` | WPF Application |
-| `mstest` | MSTest Unit Test Project |
+Show the user the **complete, unfiltered** CLI output. The user picks a template by its short name. Different machines may have different templates installed (e.g. Avalonia, Playwright, custom company templates) — the CLI output is the only source of truth.
 
 ---
 
