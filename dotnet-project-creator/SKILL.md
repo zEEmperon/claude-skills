@@ -17,16 +17,20 @@ Scaffold a .NET solution + project using only the `dotnet` CLI. Supports C#, F#,
 
 ## Step 1 — Gather Information from the User
 
-Ask the user for **all of the following** before proceeding. You can ask in one message:
+Ask for **everything in a single message**. To do this, run `dotnet new list --type project` first (without a language filter), then present the full output alongside all questions. This avoids a back-and-forth conversation.
 
-1. **Target directory** — full path where the solution will be created. Must exist and be empty (a `.git` folder is allowed).
-2. **Solution name** — e.g. `MyApp`
-3. **Project name** — e.g. `MyApp.Api`
-4. **Language** — `C#` (default), `F#`, or `VB`. Note: not all templates are available for every language.
-5. **Project template** — run `dotnet new list --type project --language "<CHOSEN_LANGUAGE>"` first and show the user the **complete, unfiltered** CLI output so they can choose. Do NOT substitute a hardcoded or curated subset — the user may have third-party templates installed. Let the user pick by short name.
-6. **Target framework** (optional) — e.g. `net9.0`, `net8.0`. Leave blank to use the SDK default.
-7. **Directory.Build.props** — yes/no. Centralizes shared MSBuild properties (TreatWarningsAsErrors, Nullable, etc.) across all projects in the solution.
-8. **Directory.Packages.props** (Central Package Management) — yes/no. Only relevant if the user plans multiple projects or wants to centralize NuGet versions. Requires NuGet 6.2+ / .NET SDK 6.0.300+.
+1. Run `dotnet new list --type project` and include the **complete, unfiltered, raw** CLI output in your message. Do NOT reformat into a different table, do NOT truncate rows, do NOT add "(+ more …)" summaries, do NOT omit any entries. Copy-paste the full terminal output as-is.
+2. Then ask for all of the following **in the same message**:
+   1. **Target directory** — full path where the solution will be created. Must exist and be empty (config/metadata files like `.git/`, `.gitignore`, `.gitattributes`, `.editorconfig`, `.claude/`, `.vscode/` are allowed and will not be touched).
+   2. **Solution name** — e.g. `MyApp`
+   3. **Project name** — e.g. `MyApp.Api`
+   4. **Language** — `C#` (default), `F#`, or `VB`. Note: not all templates are available for every language.
+   5. **Project template** — pick a short name from the list above. Note that some templates are only available for certain languages (see the Language column).
+   6. **Target framework** (optional) — e.g. `net9.0`, `net8.0`. Leave blank to use the SDK default.
+   7. **Directory.Build.props** — yes/no. Centralizes shared MSBuild properties (TreatWarningsAsErrors, Nullable, etc.) across all projects in the solution.
+   8. **Directory.Packages.props** (Central Package Management) — yes/no. Only relevant if the user plans multiple projects or wants to centralize NuGet versions.
+
+The user should be able to answer all 8 items in a single reply. Do **not** split this into multiple rounds of questions.
 
 > **Never skip asking for the target directory.** Refuse to proceed without it.
 
@@ -34,8 +38,21 @@ Ask the user for **all of the following** before proceeding. You can ask in one 
 
 ## Step 2 — Pre-flight Checks
 
-Before running any `dotnet` commands, validate everything via `bash_tool`:
+Before running any `dotnet` commands, validate:
 
+**Windows (PowerShell):**
+```powershell
+# 1. dotnet SDK present
+dotnet --version
+
+# 2. Directory exists
+Test-Path "<TARGET_DIR>" -PathType Container
+
+# 3. Directory contents (allow config/metadata: .git, .gitignore, .gitattributes, .editorconfig, .claude, .vscode)
+Get-ChildItem "<TARGET_DIR>" -Force | Where-Object { $_.Name -notin '.git','.gitignore','.gitattributes','.editorconfig','.claude','.vscode' }
+```
+
+**Linux / macOS (bash):**
 ```bash
 # 1. dotnet SDK present
 dotnet --version
@@ -43,36 +60,41 @@ dotnet --version
 # 2. Directory exists
 test -d "<TARGET_DIR>" && echo "exists" || echo "missing"
 
-# 3. Directory is empty (allow only .git)
-find "<TARGET_DIR>" -mindepth 1 -maxdepth 1 ! -name '.git' | head -5
+# 3. Directory contents (allow config/metadata)
+find "<TARGET_DIR>" -mindepth 1 -maxdepth 1 ! -name '.git' ! -name '.gitignore' ! -name '.gitattributes' ! -name '.editorconfig' ! -name '.claude' ! -name '.vscode' | head -5
 ```
 
 **Rules:**
 - If `dotnet` is missing → tell the user to install the .NET SDK from https://dotnet.microsoft.com/download and stop.
-- If directory is missing → create it automatically with `mkdir -p "<TARGET_DIR>"` and inform the user it was created.
-- If directory has unexpected files → stop and warn; do **not** overwrite.
+- If directory is missing → create it (`New-Item -ItemType Directory` on Windows, `mkdir -p` on Linux/macOS) and inform the user.
+- If directory has unexpected files (anything beyond the allowed config/metadata list above) → stop and warn; do **not** overwrite.
 
 ---
 
 ## Step 3 — Scaffold the Solution
 
+Always use **absolute paths** — do not rely on `cd` because the working directory may reset between terminal invocations.
+
 ```bash
-cd "<TARGET_DIR>"
-dotnet new sln --name "<SOLUTION_NAME>" --output .
+dotnet new sln --name "<SOLUTION_NAME>" --output "<TARGET_DIR>"
 ```
 
-> `--output .` keeps the `.sln` file in the target directory (not a subdirectory).
+> `--output "<TARGET_DIR>"` keeps the solution file in the target directory (not a subdirectory).
+
+> **Important:** .NET 9+ SDK creates `.slnx` (XML-based) by default instead of `.sln`. After this command, check which file was created (`.sln` or `.slnx`) and use that filename in all subsequent commands. Do not hardcode `.sln`.
 
 ---
 
 ## Step 4 — Scaffold the Project
 
+Use absolute paths for `--output`:
+
 ```bash
 # Basic (no framework specified)
-dotnet new <TEMPLATE> --name "<PROJECT_NAME>" --output "<PROJECT_NAME>" --language "<LANGUAGE>"
+dotnet new <TEMPLATE> --name "<PROJECT_NAME>" --output "<TARGET_DIR>/<PROJECT_NAME>" --language "<LANGUAGE>"
 
 # With explicit framework
-dotnet new <TEMPLATE> --name "<PROJECT_NAME>" --output "<PROJECT_NAME>" --language "<LANGUAGE>" --framework <FRAMEWORK>
+dotnet new <TEMPLATE> --name "<PROJECT_NAME>" --output "<TARGET_DIR>/<PROJECT_NAME>" --language "<LANGUAGE>" --framework <FRAMEWORK>
 ```
 
 The project lands in `<TARGET_DIR>/<PROJECT_NAME>/`.
@@ -81,9 +103,16 @@ The project lands in `<TARGET_DIR>/<PROJECT_NAME>/`.
 
 ## Step 5 — Add Project to Solution
 
+Use the actual solution filename discovered in Step 3 (`.sln` or `.slnx`). Use the correct project file extension for the chosen language:
+- C# → `.csproj`
+- F# → `.fsproj`
+- VB → `.vbproj`
+
 ```bash
-dotnet sln "<TARGET_DIR>/<SOLUTION_NAME>.sln" add "<TARGET_DIR>/<PROJECT_NAME>/<PROJECT_NAME>.csproj"
+dotnet sln "<TARGET_DIR>/<SOLUTION_FILE>" add "<TARGET_DIR>/<PROJECT_NAME>/<PROJECT_NAME>.<EXT>"
 ```
+
+Where `<SOLUTION_FILE>` is the actual file (e.g. `MyApp.slnx` or `MyApp.sln`) and `<EXT>` is `csproj`, `fsproj`, or `vbproj`.
 
 ---
 
@@ -95,13 +124,9 @@ If the user chose yes, create `<TARGET_DIR>/Directory.Build.props`. Tailor the c
 ```xml
 <Project>
   <PropertyGroup>
-    <!-- Enforce nullable reference types across all projects -->
     <Nullable>enable</Nullable>
-    <!-- Treat all warnings as errors in CI; comment out locally if noisy -->
     <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
-    <!-- Implicit usings reduce boilerplate -->
     <ImplicitUsings>enable</ImplicitUsings>
-    <!-- Deterministic builds for reproducibility -->
     <Deterministic>true</Deterministic>
   </PropertyGroup>
 </Project>
@@ -111,9 +136,7 @@ If the user chose yes, create `<TARGET_DIR>/Directory.Build.props`. Tailor the c
 ```xml
 <Project>
   <PropertyGroup>
-    <!-- Treat all warnings as errors in CI; comment out locally if noisy -->
     <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
-    <!-- Deterministic builds for reproducibility -->
     <Deterministic>true</Deterministic>
   </PropertyGroup>
 </Project>
@@ -132,16 +155,9 @@ If the user chose yes, create `<TARGET_DIR>/Directory.Packages.props`:
 ```xml
 <Project>
   <PropertyGroup>
-    <!-- Enable NuGet Central Package Management (requires NuGet 6.2+ / SDK 6.0.300+) -->
     <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
   </PropertyGroup>
   <ItemGroup>
-    <!--
-      Define package versions here. Projects reference packages WITHOUT a Version attribute.
-      Example:
-      <PackageVersion Include="Newtonsoft.Json" Version="13.0.3" />
-      <PackageVersion Include="Serilog" Version="4.1.0" />
-    -->
   </ItemGroup>
 </Project>
 ```
@@ -152,16 +168,25 @@ When `Directory.Packages.props` is created, also strip the `Version` attribute f
 
 ## Step 8 — Verify the Result
 
+**Windows (PowerShell):**
+```powershell
+# Show final tree
+Get-ChildItem -Recurse "<TARGET_DIR>" | Where-Object { $_.FullName -notmatch '\\.git\\' -and $_.FullName -notmatch '\\.claude\\' }
+
+# Build to confirm everything compiles (do NOT use --no-restore; templates may not auto-restore)
+dotnet build "<TARGET_DIR>" -v minimal
+```
+
+**Linux / macOS (bash):**
 ```bash
-# Show final tree (Linux/macOS)
+# Show final tree
 find "<TARGET_DIR>" -not -path '*/.git/*' | sort
 
 # Build to confirm everything compiles
-cd "<TARGET_DIR>"
-dotnet build --no-restore -v minimal 2>&1 | tail -20
+dotnet build "<TARGET_DIR>" -v minimal
 ```
 
-On Windows use `Get-ChildItem -Recurse "<TARGET_DIR>"` instead of `find`.
+> Use `dotnet build` **without** `--no-restore` — not all templates auto-restore packages during creation.
 
 ---
 
@@ -177,17 +202,30 @@ Report:
 
 ## Cleanup on Failure
 
-If **any** step fails, roll back everything created in this run. Track which artifacts were created:
+If **any** step fails, roll back everything created in this run. Track which artifacts were created.
 
+**Windows (PowerShell):**
+```powershell
+# If the target directory itself was created by this run, remove it entirely
+Remove-Item -Recurse -Force "<TARGET_DIR>"
+
+# If the target directory already existed, remove only what was added:
+Remove-Item -Force "<TARGET_DIR>/<SOLUTION_FILE>"          # .sln or .slnx
+Remove-Item -Recurse -Force "<TARGET_DIR>/<PROJECT_NAME>"
+Remove-Item -Force "<TARGET_DIR>/Directory.Build.props"    # if created
+Remove-Item -Force "<TARGET_DIR>/Directory.Packages.props" # if created
+```
+
+**Linux / macOS (bash):**
 ```bash
-# If the target directory itself was created by this run (did not exist before), remove it entirely
+# If the target directory itself was created by this run, remove it entirely
 rm -rf "<TARGET_DIR>"
 
-# If the target directory already existed before this run, remove only what was added:
-rm -f "<TARGET_DIR>/<SOLUTION_NAME>.sln"
+# If the target directory already existed, remove only what was added:
+rm -f "<TARGET_DIR>/<SOLUTION_FILE>"         # .sln or .slnx
 rm -rf "<TARGET_DIR>/<PROJECT_NAME>"
-rm -f "<TARGET_DIR>/Directory.Build.props"
-rm -f "<TARGET_DIR>/Directory.Packages.props"
+rm -f "<TARGET_DIR>/Directory.Build.props"   # if created
+rm -f "<TARGET_DIR>/Directory.Packages.props" # if created
 ```
 
 > Do **not** delete the `.git` folder or any files that existed before this skill ran.
@@ -199,12 +237,17 @@ rm -f "<TARGET_DIR>/Directory.Packages.props"
 
 | Concern | Linux/macOS | Windows |
 |---|---|---|
+| Shell | bash | PowerShell |
 | Path separator | `/` | `\` (but `dotnet` accepts `/`) |
 | Filename case | Case-sensitive: `Directory.Build.props` must match exactly | Case-insensitive |
-| Tree listing | `find "<TARGET_DIR>" -not -path '*/.git/*' \| sort` | `Get-ChildItem -Recurse "<TARGET_DIR>"` |
+| Tree listing | `find … \| sort` | `Get-ChildItem -Recurse` |
+| Create directory | `mkdir -p` | `New-Item -ItemType Directory` |
+| Delete files | `rm -f` / `rm -rf` | `Remove-Item -Force` / `Remove-Item -Recurse -Force` |
 | `dotnet` in PATH | Usually `/usr/bin/dotnet` | Usually `C:\Program Files\dotnet\dotnet.exe` |
 
 The `dotnet` CLI itself behaves identically on all platforms — all `dotnet` commands in this skill work unchanged.
+
+**Important:** Always use **absolute paths** in all commands. Do not rely on `cd` — the working directory may reset between terminal invocations.
 
 ---
 
@@ -213,10 +256,10 @@ The `dotnet` CLI itself behaves identically on all platforms — all `dotnet` co
 Do **not** use any hardcoded or predefined template list. Always run:
 
 ```bash
-dotnet new list --type project --language "<CHOSEN_LANGUAGE>"
+dotnet new list --type project
 ```
 
-Show the user the **complete, unfiltered** CLI output. The user picks a template by its short name. Different machines may have different templates installed (e.g. Avalonia, Playwright, custom company templates) — the CLI output is the only source of truth.
+Show the user the **complete, unfiltered** CLI output (without a `--language` filter — the Language column lets the user see which templates support their chosen language). The user picks a template by its short name. Different machines may have different templates installed (e.g. Avalonia, Playwright, custom company templates) — the CLI output is the only source of truth.
 
 ---
 
@@ -227,24 +270,27 @@ Target dir:    /home/user/projects/my-solution   (empty)
 Solution name: MyApp
 Project name:  MyApp.Api
 Template:      webapi
+Language:      C#
 Framework:     net9.0
 Props:         Directory.Build.props = yes, Directory.Packages.props = no
 ```
 
 Commands executed:
 ```bash
-cd /home/user/projects/my-solution
-dotnet new sln --name MyApp --output .
-dotnet new webapi --name MyApp.Api --output MyApp.Api --language "C#" --framework net9.0
-dotnet sln MyApp.sln add MyApp.Api/MyApp.Api.csproj
+dotnet new sln --name MyApp --output /home/user/projects/my-solution
+# Check: did it create MyApp.sln or MyApp.slnx? (SDK 9+ defaults to .slnx)
+ls /home/user/projects/my-solution/MyApp.*   # → MyApp.slnx
+
+dotnet new webapi --name MyApp.Api --output /home/user/projects/my-solution/MyApp.Api --language "C#" --framework net9.0
+dotnet sln /home/user/projects/my-solution/MyApp.slnx add /home/user/projects/my-solution/MyApp.Api/MyApp.Api.csproj
 # create Directory.Build.props
-dotnet build --no-restore -v minimal
+dotnet build /home/user/projects/my-solution -v minimal
 ```
 
 Result:
 ```
 my-solution/
-├── MyApp.sln
+├── MyApp.slnx
 ├── Directory.Build.props
 └── MyApp.Api/
     ├── MyApp.Api.csproj
